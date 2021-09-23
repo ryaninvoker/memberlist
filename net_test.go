@@ -300,7 +300,7 @@ func TestTCPPing(t *testing.T) {
 		}
 		defer conn.Close()
 
-		msgType, _, dec, err := m.readStream(conn)
+		msgType, _, dec, err := m.readStream(conn, true)
 		if err != nil {
 			t.Fatalf("failed to read ping: %s", err)
 		}
@@ -351,7 +351,7 @@ func TestTCPPing(t *testing.T) {
 		}
 		defer conn.Close()
 
-		_, _, dec, err := m.readStream(conn)
+		_, _, dec, err := m.readStream(conn, true)
 		if err != nil {
 			t.Fatalf("failed to read ping: %s", err)
 		}
@@ -390,7 +390,7 @@ func TestTCPPing(t *testing.T) {
 		}
 		defer conn.Close()
 
-		_, _, _, err = m.readStream(conn)
+		_, _, _, err = m.readStream(conn, true)
 		if err != nil {
 			t.Fatalf("failed to read ping: %s", err)
 		}

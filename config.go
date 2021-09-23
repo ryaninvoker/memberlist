@@ -21,6 +21,9 @@ type Config struct {
 	// make a NetTransport using BindAddr and BindPort from this structure.
 	Transport Transport
 
+	// TODO
+	Interceptor Interceptor
+
 	// Configuration related to what address to bind to and ports to
 	// listen on. The port is used for both UDP and TCP gossip. It is
 	// assumed other nodes are running on this port, but they do not need

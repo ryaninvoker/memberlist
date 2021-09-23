@@ -111,3 +111,60 @@ func (t *shimNodeAwareTransport) WriteToAddress(b []byte, addr Address) (time.Ti
 func (t *shimNodeAwareTransport) DialAddressTimeout(addr Address, timeout time.Duration) (net.Conn, error) {
 	return t.DialTimeout(addr.Addr, timeout)
 }
+
+type outboundInterceptedTransport struct {
+	interceptor Interceptor
+	NodeAwareTransport
+}
+
+var _ NodeAwareTransport = (*shimNodeAwareTransport)(nil)
+
+func (t *outboundInterceptedTransport) WriteToAddress(b []byte, addr Address) (time.Time, error) {
+	if t.interceptor != nil {
+		var err error
+		b, err = t.interceptor.InterceptOutboundPacket(b)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to intercept outbound packet: %w", err)
+		}
+	}
+	return t.NodeAwareTransport.WriteToAddress(b, addr)
+}
+
+func (t *outboundInterceptedTransport) DialAddressTimeout(addr Address, timeout time.Duration) (net.Conn, error) {
+	conn, err := t.NodeAwareTransport.DialAddressTimeout(addr, timeout)
+	if err != nil {
+		return nil, err
+	}
+	if t.interceptor != nil {
+		if err := t.interceptor.InterceptOutboundStream(conn); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to intercept outbound stream: %w", err)
+		}
+	}
+	return conn, nil
+}
+
+func (t *outboundInterceptedTransport) DialTimeout(addr string, timeout time.Duration) (net.Conn, error) {
+	conn, err := t.NodeAwareTransport.DialTimeout(addr, timeout)
+	if err != nil {
+		return nil, err
+	}
+	if t.interceptor != nil {
+		if err := t.interceptor.InterceptOutboundStream(conn); err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to intercept outbound stream: %w", err)
+		}
+	}
+	return conn, nil
+}
+
+func (t *outboundInterceptedTransport) WriteTo(b []byte, addr string) (time.Time, error) {
+	if t.interceptor != nil {
+		var err error
+		b, err = t.interceptor.InterceptOutboundPacket(b)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to intercept outbound packet: %w", err)
+		}
+	}
+	return t.NodeAwareTransport.WriteTo(b, addr)
+}

@@ -42,6 +42,9 @@ const (
 type messageType uint8
 
 // The list of available message types.
+//
+// WARNING: ONLY APPEND TO THIS LIST! The numeric values are part of the
+// protocol itself.
 const (
 	pingMsg messageType = iota
 	indirectPingMsg
@@ -57,6 +60,13 @@ const (
 	nackRespMsg
 	hasCrcMsg
 	errMsg
+)
+
+const (
+	// hasLabelMsg has a deliberately high value so that you can disambiguate
+	// it from the encryptionVersion header which is either 0/1 right now and
+	// also any of the existing messageTypes
+	hasLabelMsg messageType = 244
 )
 
 // compressionType is used to specify the compression algorithm
@@ -226,7 +236,7 @@ func (m *Memberlist) handleConn(conn net.Conn) {
 	metrics.IncrCounter([]string{"memberlist", "tcp", "accept"}, 1)
 
 	conn.SetDeadline(time.Now().Add(m.config.TCPTimeout))
-	msgType, bufConn, dec, err := m.readStream(conn)
+	msgType, bufConn, dec, err := m.readStream(conn, true)
 	if err != nil {
 		if err != io.EOF {
 			m.logger.Printf("[ERR] memberlist: failed to receive: %s %s", err, LogConn(conn))
@@ -322,6 +332,15 @@ func (m *Memberlist) packetListen() {
 }
 
 func (m *Memberlist) ingestPacket(buf []byte, from net.Addr, timestamp time.Time) {
+	if m.config.Interceptor != nil {
+		var err error
+		buf, err = m.config.Interceptor.InterceptInboundPacket(buf)
+		if err != nil {
+			m.logger.Printf("[ERR] memberlist: %v %s", err, LogAddress(from))
+			return
+		}
+	}
+
 	// Check if encryption is enabled
 	if m.config.EncryptionEnabled() {
 		// Decrypt the payload
@@ -726,6 +745,7 @@ func (m *Memberlist) sendMsg(a Address, msg []byte) error {
 	bytesAvail := m.config.UDPBufferSize - len(msg) - compoundHeaderOverhead
 	if m.config.EncryptionEnabled() && m.config.GossipVerifyOutgoing {
 		bytesAvail -= encryptOverhead(m.encryptionVersion())
+		// TODO: account for labels
 	}
 	extra := m.getBroadcasts(compoundOverhead, bytesAvail)
 
@@ -896,7 +916,7 @@ func (m *Memberlist) sendAndReceiveState(a Address, join bool) ([]pushNodeState,
 	}
 
 	conn.SetDeadline(time.Now().Add(m.config.TCPTimeout))
-	msgType, bufConn, dec, err := m.readStream(conn)
+	msgType, bufConn, dec, err := m.readStream(conn, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1038,13 +1058,21 @@ func (m *Memberlist) decryptRemoteState(bufConn io.Reader) ([]byte, error) {
 
 // readStream is used to read from a stream connection, decrypting and
 // decompressing the stream if necessary.
-func (m *Memberlist) readStream(conn net.Conn) (messageType, io.Reader, *codec.Decoder, error) {
+func (m *Memberlist) readStream(conn net.Conn, doIntercept bool) (messageType, io.Reader, *codec.Decoder, error) {
 	// Created a buffered reader
 	var bufConn io.Reader = bufio.NewReader(conn)
 
+	if doIntercept && m.config.Interceptor != nil {
+		var err error
+		bufConn, err = m.config.Interceptor.InterceptInboundStream(bufConn)
+		if err != nil {
+			return 0, nil, nil, err
+		}
+	}
+
 	// Read the message type
 	buf := [1]byte{0}
-	if _, err := bufConn.Read(buf[:]); err != nil {
+	if _, err := io.ReadFull(bufConn, buf[:]); err != nil {
 		return 0, nil, nil, err
 	}
 	msgType := messageType(buf[0])
@@ -1240,7 +1268,7 @@ func (m *Memberlist) sendPingAndWaitForAck(a Address, ping ping, deadline time.T
 		return false, err
 	}
 
-	msgType, _, dec, err := m.readStream(conn)
+	msgType, _, dec, err := m.readStream(conn, false)
 	if err != nil {
 		return false, err
 	}
@@ -1259,4 +1287,11 @@ func (m *Memberlist) sendPingAndWaitForAck(a Address, ping ping, deadline time.T
 	}
 
 	return true, nil
+}
+
+type Interceptor interface {
+	InterceptInboundStream(io.Reader) (io.Reader, error)
+	InterceptOutboundStream(w io.Writer) error
+	InterceptInboundPacket(buf []byte) ([]byte, error)
+	InterceptOutboundPacket(buf []byte) ([]byte, error)
 }
