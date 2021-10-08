@@ -53,7 +53,8 @@ type Memberlist struct {
 	shutdownLock sync.Mutex // Serializes calls to Shutdown
 	leaveLock    sync.Mutex // Serializes calls to Leave
 
-	transport NodeAwareTransport
+	transport   NodeAwareTransport
+	interceptor Interceptor
 
 	handoffCh            chan struct{}
 	highPriorityMsgQueue *list.List
@@ -199,6 +200,7 @@ func newMemberlist(conf *Config) (*Memberlist, error) {
 		shutdownCh:           make(chan struct{}),
 		leaveBroadcast:       make(chan struct{}, 1),
 		transport:            nodeAwareTransport,
+		interceptor:          conf.Interceptor,
 		handoffCh:            make(chan struct{}, 1),
 		highPriorityMsgQueue: list.New(),
 		lowPriorityMsgQueue:  list.New(),

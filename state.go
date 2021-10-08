@@ -596,6 +596,9 @@ func (m *Memberlist) gossip() {
 	if m.config.EncryptionEnabled() {
 		bytesAvail -= encryptOverhead(m.encryptionVersion())
 	}
+	if m.interceptor != nil {
+		bytesAvail -= m.interceptor.InterceptionOverhead()
+	}
 
 	for _, node := range kNodes {
 		// Get any pending broadcasts

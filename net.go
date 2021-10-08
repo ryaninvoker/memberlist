@@ -332,9 +332,9 @@ func (m *Memberlist) packetListen() {
 }
 
 func (m *Memberlist) ingestPacket(buf []byte, from net.Addr, timestamp time.Time) {
-	if m.config.Interceptor != nil {
+	if m.interceptor != nil {
 		var err error
-		buf, err = m.config.Interceptor.InterceptInboundPacket(buf)
+		buf, err = m.interceptor.InterceptInboundPacket(buf)
 		if err != nil {
 			m.logger.Printf("[ERR] memberlist: %v %s", err, LogAddress(from))
 			return
@@ -745,7 +745,9 @@ func (m *Memberlist) sendMsg(a Address, msg []byte) error {
 	bytesAvail := m.config.UDPBufferSize - len(msg) - compoundHeaderOverhead
 	if m.config.EncryptionEnabled() && m.config.GossipVerifyOutgoing {
 		bytesAvail -= encryptOverhead(m.encryptionVersion())
-		// TODO: account for labels
+	}
+	if m.interceptor != nil {
+		bytesAvail -= m.interceptor.InterceptionOverhead()
 	}
 	extra := m.getBroadcasts(compoundOverhead, bytesAvail)
 
@@ -1294,4 +1296,5 @@ type Interceptor interface {
 	InterceptOutboundStream(w io.Writer) error
 	InterceptInboundPacket(buf []byte) ([]byte, error)
 	InterceptOutboundPacket(buf []byte) ([]byte, error)
+	InterceptionOverhead() int
 }
