@@ -466,6 +466,7 @@ func (m *Memberlist) setAdvertise(addr net.IP, port int) {
 }
 
 func (m *Memberlist) refreshAdvertise() (net.IP, int, error) {
+	fmt.Print("start to get adverriseAddr " + m.config.AdvertiseAddr + " advertisePort" + string(m.config.AdvertisePort))
 	addr, port, err := m.transport.FinalAdvertiseAddr(
 		m.config.AdvertiseAddr, m.config.AdvertisePort)
 	if err != nil {
